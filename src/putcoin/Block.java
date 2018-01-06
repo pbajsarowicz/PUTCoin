@@ -5,10 +5,16 @@
  */
 package putcoin;
 
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.SignatureException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  *
@@ -16,24 +22,26 @@ import java.util.Arrays;
  */
 public class Block {
     private ArrayList<Transaction> transactions = new ArrayList<Transaction>();
+    private ArrayList<Transaction> rejectedTransactions = new ArrayList<Transaction>();
 //    private String[] transactions;
+    private String displayName;
     private int nonce;
     
     private String blockHash;
-    private String previousBlockHash;
+    private Block previousBlock;
 
-    public Block(String previousBlockHash, ArrayList<Transaction>  transactions) throws NoSuchAlgorithmException {
-        this.previousBlockHash = previousBlockHash;
-        this.transactions = transactions;
+    public Block(Block previousBlock, String displayName) throws NoSuchAlgorithmException {
+        this.previousBlock = previousBlock;
         this.blockHash = this.generateHash();
         this.nonce = 0; // A temporary value
+        this.displayName = displayName;
     }
     
     public String generateHash() throws NoSuchAlgorithmException {
         MessageDigest md;
         byte[] digest = null;
         
-        String rawMessage = this.previousBlockHash + ":" +
+        String rawMessage = this.getPreviousBlockHash() + ":" +
                             this.transactions + ":" +
                             this.nonce;
         
@@ -62,12 +70,23 @@ public class Block {
     public String getBlockHash() {
         return blockHash;
     }
+    
+    /**
+     * @return the previousBlock
+     */
+    public Block getPreviousBlock() {
+        return this.previousBlock;
+    }
 
     /**
      * @return the previousBlockHash
      */
     public String getPreviousBlockHash() {
-        return previousBlockHash;
+        if (this.previousBlock != null) {
+            return this.previousBlock.blockHash;
+        }
+        
+        return "";
     }
 
     /**
@@ -76,9 +95,26 @@ public class Block {
     public ArrayList<Transaction> getTransactions() {
         return transactions;
     }
-    
-    public boolean validateBlock(Block block) {
-        return true;
-    }
 
+    /**
+     * @return the displayName
+     */
+    public String getDisplayName() {
+        return displayName;
+    }
+    
+    public boolean addTransaction(Transaction transaction) throws InvalidKeyException, NoSuchAlgorithmException, IOException, UnsupportedEncodingException, SignatureException {
+        Status status = transaction.verify();
+        System.out.println(status.getReason());
+        
+        if (status.isOk()) {
+            transactions.add(transaction);
+            
+            return true;
+        } else {
+            rejectedTransactions.add(transaction);
+            
+            return false;
+        }
+    }
 }

@@ -5,11 +5,16 @@
  */
 package putcoin;
 
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.security.InvalidKeyException;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.PublicKey;
+import java.security.Signature;
 import java.security.SignatureException;
 import java.util.ArrayList;
+
 
 /**
  *
@@ -20,66 +25,54 @@ public class PUTCoin {
     /**
      * @param args the command line arguments
      */
-    public static void main(String[] args) throws NoSuchAlgorithmException, InvalidKeyException, UnsupportedEncodingException, SignatureException {
-        Wallet walletJohn = new Wallet();
-        Wallet walletGeorge = new Wallet();
+    public static void main(String[] args) throws NoSuchAlgorithmException, InvalidKeyException, UnsupportedEncodingException, SignatureException, IOException {
+        // Initialize blockchain
+        Blockchain blockchain = Blockchain.getInstance();
         
-        // Genesis block
-        ArrayList<Transaction> genesisTransactions = new ArrayList<Transaction>();
-        // John sends PUTCoins to himself
-        Transaction genesisTransaction = walletJohn.createTransaction(walletJohn.getPubKey(), 20); 
-        genesisTransactions.add(genesisTransaction);
-        Block genesisBlock = new Block(null, genesisTransactions);
-        walletJohn.appendBlock(genesisBlock);
+        // Create first wallets
+        Wallet walletJohn = new Wallet("John");
+        Wallet walletGeorge = new Wallet("George");
         
-        ArrayList<Transaction> newTransactions = new ArrayList<Transaction>();
-        // John sends PUTCoins to George
-        Transaction newTransaction = walletJohn.createTransaction(walletGeorge.getPubKey(), 5);
-        newTransactions.add(newTransaction);
-        Block block2 = new Block(genesisBlock.getBlockHash(), newTransactions);
-        walletJohn.appendBlock(block2);
-        walletGeorge.appendBlock(block2);
+        // Take care of genesis block
+        Genesis genesis = new Genesis();
+        // Send first PUTCoins to John
+        genesis.createGenesisTransaction(walletJohn, 20); 
         
+        Block genesisBlock = genesis.createGenesisBlock();
+        blockchain.addBlock(genesisBlock);
         
-//        System.out.println("walletJohn " + walletJohn.getBalance(block2.getBlockHash()));
-//        System.out.println("walletGeorge " + walletGeorge.getBalance(block2.getBlockHash()));
-//        
-        System.out.println("walletJohn " + walletJohn.getBalance());
-        System.out.println("walletGeorge " + walletGeorge.getBalance());
+        System.out.println("------------------------------------ genesisBlock");
+        walletJohn.getBalance();
+        walletGeorge.getBalance();
+        System.out.println("-------------------------------------------------");
+
         
-//        String[] block2Transactions = {"Third"};
-//        Block block2 = new Block(genesisBlock.getBlockHash(), block2Transactions);
-//
-//        String[] block3Transactions = {"Fourth, Fifth"};
-//        Block block3 = new Block(block2.getBlockHash(), block3Transactions);
-//
-//        System.out.println("Genesis block:");
-//        System.out.println(genesisBlock.getBlockHash());
-//
-//        System.out.println("Block 2:");
-//        System.out.println(block2.getBlockHash());
-//
-//        System.out.println("Block 3:");
-//        System.out.println(block3.getBlockHash());
+        // New block
+        Block newBlock = new Block(genesisBlock, "NEW");
+        // [PASS] Correct transaction - it's supposed to pass
+        newBlock.addTransaction(walletJohn.createTransaction(walletGeorge, 4));
+        // [FAIL] Negative amount - should fail
+        newBlock.addTransaction(walletJohn.createTransaction(walletGeorge, -1));
+        // [FAIL] Amount greater than a balance
+        newBlock.addTransaction(walletJohn.createTransaction(walletGeorge, 27)); 
+        // [FAIL] George does not have PTC yet (block not confirmed (not in the blockchain))
+        newBlock.addTransaction(walletGeorge.createTransaction(walletJohn, 1)); 
+        blockchain.addBlock(newBlock);
+        System.out.println("---------------------------------------- newBlock");
+        walletJohn.getBalance();
+        walletGeorge.getBalance();
+        System.out.println("-------------------------------------------------");
         
         
-//        String[] genesisTransactions = {"First", "Second"};
-//        Block genesisBlock = new Block(0, genesisTransactions);
-//
-//        String[] block2Transactions = {"Third"};
-//        Block block2 = new Block(genesisBlock.getBlockHash(), block2Transactions);
-//
-//        String[] block3Transactions = {"Fourth, Fifth"};
-//        Block block3 = new Block(block2.getBlockHash(), block3Transactions);
-//
-//        System.out.println("Genesis block:");
-//        System.out.println(genesisBlock.getBlockHash());
-//
-//        System.out.println("Block 2:");
-//        System.out.println(block2.getBlockHash());
-//
-//        System.out.println("Block 3:");
-//        System.out.println(block3.getBlockHash());
+        // Another block
+        Block anotherBlock = new Block(genesisBlock, "NEW");
+        // Trying again with a last transaction (not confirmed with a first attempt)
+        anotherBlock.addTransaction(walletGeorge.createTransaction(walletJohn, 1)); // George does not have PTC yet (block not confirmed)
+        blockchain.addBlock(anotherBlock);
+        System.out.println("------------------------------------ anotherBlock");
+        walletJohn.getBalance();
+        walletGeorge.getBalance();
+        System.out.println("-------------------------------------------------");
     }
     
 }

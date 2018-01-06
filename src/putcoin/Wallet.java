@@ -7,6 +7,7 @@ package putcoin;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -25,23 +26,19 @@ import sun.misc.BASE64Decoder;
  * @author piotrbajsarowicz
  */
 public class Wallet {
-    private ArrayList<Block> blocks = new ArrayList<Block>();
-    
+    private String displayName;
     private PublicKey pubKey;
     private PrivateKey privKey;
     private int RSA_KEY_SIZE = 2048;    
     private KeyPairGenerator keyPairGen = null;
 
-    public Wallet() throws NoSuchAlgorithmException {
+    public Wallet(String displayName) throws NoSuchAlgorithmException {
         this.keyPairGen = KeyPairGenerator.getInstance("RSA");
         this.keyPairGen.initialize(this.RSA_KEY_SIZE);
         KeyPair keyPair = this.keyPairGen.genKeyPair();
         this.pubKey = keyPair.getPublic();
         this.privKey = keyPair.getPrivate();
-    }
-    
-    public void appendBlock(Block block) {
-        this.blocks.add(block);
+        this.displayName = displayName;
     }
 
     /**
@@ -50,13 +47,6 @@ public class Wallet {
     public PublicKey getPubKey() {
         return pubKey;
     }
-
-    /**
-     * @return the privKey
-     */
-    public PrivateKey getPrivKey() {
-        return privKey;
-    }
     
     public String generateHash(String message) throws NoSuchAlgorithmException {
         MessageDigest md;
@@ -64,7 +54,7 @@ public class Wallet {
         
         md = MessageDigest.getInstance("SHA-256");
         md.update(pubKey.getEncoded());
-        digest = md.digest();
+        digest = md.digest(message.getBytes(StandardCharsets.UTF_8));
 
         StringBuffer hexString = new StringBuffer();
         for (int i = 0; i < digest.length; i++) {
@@ -95,37 +85,45 @@ public class Wallet {
     }
     
     public int getBalance() {
+        return getBalance(true);
+    }
+    
+    public int getBalance(boolean prompt) {
         int balance = 0;
+        Blockchain blockchain = Blockchain.getInstance();
         
-        for (Block block : this.blocks) {
+        for (Block block : blockchain.getBlocks()) {
             for (Transaction transaction : block.getTransactions()) {
-                if (transaction.getInput().contains(this.getPubKey())) {
-                    balance += transaction.getAmount();
-                } else if (transaction.getOutput().contains(this.getPubKey())) {
+                if (
+                    transaction.getSender() != null &&
+                    transaction.getSender().getPubKey() == this.getPubKey()
+                ) {
                     balance -= transaction.getAmount();
+                } else if (transaction.getReceiver().getPubKey() == this.getPubKey()) {
+                    balance += transaction.getAmount();   
                 }
             }
+        }
+        
+        if (prompt) {
+            System.out.println("| [" + this.getPubKey().hashCode() + "] " + balance);
         }
         
         return balance;
     }
     
-    public Transaction createTransaction(PublicKey receiverPubKey, int amount) throws InvalidKeyException, UnsupportedEncodingException, NoSuchAlgorithmException, SignatureException {
-        String transactionRaw = this.getPubKey() + ":" +
-                                receiverPubKey + ":" +
-                                amount;
-        
-        ArrayList input = new ArrayList();
-        input.add(receiverPubKey);
-        
-        ArrayList output = new ArrayList();
-        output.add(this.getPubKey());
-        
+    public String getMessage(PublicKey receiverPubKey, int amount) {
+        return this.getPubKey() + ":" +
+               receiverPubKey + ":" +
+               amount;
+    }
+    
+    public Transaction createTransaction(Wallet receiver, int amount) throws InvalidKeyException, UnsupportedEncodingException, NoSuchAlgorithmException, SignatureException {
+        String transactionRaw = this.getMessage(receiver.getPubKey(), amount);
         String signature = this.sign(transactionRaw);
         
-        String valueToHash = transactionRaw + ":" + signature;
-        String hash = this.generateHash(valueToHash);
+        System.out.println(this.getPubKey().hashCode() + " ==[" + amount + " PUTCoins]==> " + receiver.getPubKey().hashCode());
     
-        return new Transaction(input, output, amount, hash, signature);
+        return new Transaction(this, receiver, amount, signature);
     }
 }
