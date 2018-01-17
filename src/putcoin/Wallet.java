@@ -18,6 +18,10 @@ import java.security.PublicKey;
 import java.security.Signature;
 import java.security.SignatureException;
 import java.util.ArrayList;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import putcoin.exceptions.CannotCreateTransactionException;
+import putcoin.exceptions.InsufficientFundsException;
 import sun.misc.BASE64Encoder;
 import sun.misc.BASE64Decoder;
 
@@ -34,8 +38,8 @@ public class Wallet {
 
     public Wallet(String displayName) throws NoSuchAlgorithmException {
         this.keyPairGen = KeyPairGenerator.getInstance("RSA");
-        this.keyPairGen.initialize(this.RSA_KEY_SIZE);
-        KeyPair keyPair = this.keyPairGen.genKeyPair();
+        this.keyPairGen.initialize(RSA_KEY_SIZE);
+        KeyPair keyPair = keyPairGen.genKeyPair();
         this.pubKey = keyPair.getPublic();
         this.privKey = keyPair.getPrivate();
         this.displayName = displayName;
@@ -48,82 +52,235 @@ public class Wallet {
         return pubKey;
     }
     
-    public String generateHash(String message) throws NoSuchAlgorithmException {
-        MessageDigest md;
-        byte[] digest = null;
-        
-        md = MessageDigest.getInstance("SHA-256");
-        md.update(pubKey.getEncoded());
-        digest = md.digest(message.getBytes(StandardCharsets.UTF_8));
-
-        StringBuffer hexString = new StringBuffer();
-        for (int i = 0; i < digest.length; i++) {
-            hexString.append(Integer.toHexString(0xFF & digest[i]));
+    /**
+     * @return the displatName
+     */
+    public String getDisplayName() {
+        return displayName;
+    }
+    
+    /**
+     * Generates a hash based on a given message for purposes of blocks
+     * and transactions.
+     * 
+     * @param message
+     * @return a transaction/block hash
+     */
+    public String generateHash(String message) {
+        try {
+            MessageDigest md;
+            byte[] digest = null;
+            
+            md = MessageDigest.getInstance("SHA-256");
+            md.update(pubKey.getEncoded());
+            digest = md.digest(message.getBytes(StandardCharsets.UTF_8));
+            
+            StringBuffer hexString = new StringBuffer();
+            for (int i = 0; i < digest.length; i++) {
+                hexString.append(Integer.toHexString(0xFF & digest[i]));
+            }
+            
+            return hexString.toString();
+        } catch (NoSuchAlgorithmException ex) {
+            Logger.getLogger(Wallet.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        return "";
+    }
+    
+    /**
+     * Signs a given message.
+     * 
+     * @param message
+     * @return a signed message.
+     */
+    public String sign(String message) {
+        try {
+            byte[] messageData = message.getBytes("UTF8");
+            Signature sig = Signature.getInstance("SHA1WithRSA");
+            sig.initSign(privKey);
+            sig.update(messageData);
+            byte[] signatureBytes = sig.sign();
+            
+            return new BASE64Encoder().encode(signatureBytes);
+        } catch (UnsupportedEncodingException ex) {
+            Logger.getLogger(Wallet.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (NoSuchAlgorithmException ex) {
+            Logger.getLogger(Wallet.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (InvalidKeyException ex) {
+            Logger.getLogger(Wallet.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (SignatureException ex) {
+            Logger.getLogger(Wallet.class.getName()).log(Level.SEVERE, null, ex);
         }
         
-        return hexString.toString();
+        // Throw an exception
+        return null;
     }
     
-    public String sign(String message) throws InvalidKeyException, UnsupportedEncodingException, NoSuchAlgorithmException, SignatureException {
-        byte[] messageData = message.getBytes("UTF8");
-        Signature sig = Signature.getInstance("SHA1WithRSA");
-        sig.initSign(this.privKey);
-        sig.update(messageData);
-        byte[] signatureBytes = sig.sign();
+    /**
+     * Verifies a signature. Used while confirming transactions and blocks.
+     * 
+     * @param signature
+     * @param message
+     * @param pubKey
+     * @return whether a message is signed with a signature
+     */
+    public boolean verify(String signature, String message, PublicKey pubKey) {
+        try {
+            Signature sig = Signature.getInstance("SHA1WithRSA");
+            sig.initVerify(pubKey);
+            byte[] messageData = message.getBytes("UTF8");
+            sig.update(messageData);
+            byte[] signatureBytes = new BASE64Decoder().decodeBuffer(signature);
+            
+            return sig.verify(signatureBytes);
+        } catch (NoSuchAlgorithmException ex) {
+            Logger.getLogger(Wallet.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (InvalidKeyException ex) {
+            Logger.getLogger(Wallet.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (UnsupportedEncodingException ex) {
+            Logger.getLogger(Wallet.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (SignatureException ex) {
+            Logger.getLogger(Wallet.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (IOException ex) {
+            Logger.getLogger(Wallet.class.getName()).log(Level.SEVERE, null, ex);
+        }
         
-        return new BASE64Encoder().encode(signatureBytes);
+        return false;
     }
     
-    public boolean verify(String signature, String message, PublicKey pubKey) throws NoSuchAlgorithmException, InvalidKeyException, UnsupportedEncodingException, SignatureException, IOException {
-        Signature sig = Signature.getInstance("SHA1WithRSA");
-        sig.initVerify(pubKey);
-        byte[] messageData = message.getBytes("UTF8");
-        sig.update(messageData);
-        byte[] signatureBytes = new BASE64Decoder().decodeBuffer(signature);
-        
-        return sig.verify(signatureBytes);
-    }
-    
-    public int getBalance() {
-        return getBalance(true);
-    }
-    
-    public int getBalance(boolean prompt) {
-        int balance = 0;
+    /**
+     * Returns actual Unspent Transaction Outputs (UTXO)
+     * (actual - in the scope of the blockchain).
+     * 
+     * @return UTXO
+     */
+    public ArrayList getUTXOInBlockchain() {
         Blockchain blockchain = Blockchain.getInstance();
+        ArrayList<Transaction.Output> UTXO = new ArrayList<Transaction.Output>();
         
         for (Block block : blockchain.getBlocks()) {
             for (Transaction transaction : block.getTransactions()) {
-                if (
-                    transaction.getSender() != null &&
-                    transaction.getSender().getPubKey() == this.getPubKey()
-                ) {
-                    balance -= transaction.getAmount();
-                } else if (transaction.getReceiver().getPubKey() == this.getPubKey()) {
-                    balance += transaction.getAmount();   
+                for (Transaction.Output output : transaction.getOutputs()) {
+                    if (
+                        output.getReceiver().getPubKey() == getPubKey() &&
+                        !output.isSpent()
+                    ) {
+                        UTXO.add(output);
+                    }
                 }
             }
         }
         
+        return UTXO;
+    }
+    
+    /**
+     * Returns Unspent Transaction Outputs (UTXO) in the scope of a block.
+     * It enables generating transactions to be confirmed that depend on
+     * each other, e.g.: two transaction in one package (block) to be confirmed:
+     * A ==[1 PTC]==> X
+     * X ==[1 PTC]==> B
+     * 
+     * @return UTXO
+     */
+    
+    public ArrayList getUTXOInBlock(Block block) {
+        ArrayList<Transaction.Output> UTXO = getUTXOInBlockchain();
+        
+
+        for (Transaction transaction : block.getTransactions()) {
+            // Add new UTXO (new outputs coming from new transactions)
+            for (Transaction.Output output : transaction.getOutputs()) {
+                if (
+                    output.getReceiver().getPubKey() == getPubKey() 
+                ) {
+                    UTXO.add(output);  
+                }
+            }
+            
+            // Remove outputs associated with inputs for new transactions
+            for (Transaction.Input input : transaction.getInputs()) {
+                if (
+                    input.getOriginOutput().getReceiver().getPubKey() == getPubKey()
+                ) {
+                    UTXO.remove(input.getOriginOutput());
+                }
+            }
+        }
+
+        return UTXO;
+    }
+    
+    /**
+     * Extra method that enables printing a balance to the console.
+     * Should be consider default.
+     * 
+     * @return a balance
+     */
+    public int getBalance() {
+        return getBalance(true);
+    }
+    
+    /**
+     * Returns a balance. Allows printing a result to the console.
+     * 
+     * @param prompt
+     * @return a balance
+     */
+    public int getBalance(boolean prompt) {
+        ArrayList<Transaction.Output> transactionsOutputsToSpend = getUTXOInBlockchain();
+        int balance = 0;
+        
+        for (Transaction.Output output : transactionsOutputsToSpend) {
+            balance += output.getAmount();
+        }
+
         if (prompt) {
-            System.out.println("| [" + this.getPubKey().hashCode() + "] " + balance);
+            System.out.println("| [" + getDisplayName() + "] " + balance);
+        }
+        
+        return balance;
+    }
+    
+    public int getBalanceForBlock(Block block) {
+        ArrayList<Transaction.Output> transactionsOutputsToSpend = getUTXOInBlock(block);
+        
+        int balance = 0;
+        
+        for (Transaction.Output output : transactionsOutputsToSpend) {
+            balance += output.getAmount();
         }
         
         return balance;
     }
     
     public String getMessage(PublicKey receiverPubKey, int amount) {
-        return this.getPubKey() + ":" +
+        return getPubKey() + ":" +
                receiverPubKey + ":" +
                amount;
     }
     
-    public Transaction createTransaction(Wallet receiver, int amount) throws InvalidKeyException, UnsupportedEncodingException, NoSuchAlgorithmException, SignatureException {
-        String transactionRaw = this.getMessage(receiver.getPubKey(), amount);
-        String signature = this.sign(transactionRaw);
-        
-        System.out.println(this.getPubKey().hashCode() + " ==[" + amount + " PUTCoins]==> " + receiver.getPubKey().hashCode());
+    /**
+     * Creates a transaction object.
+     * Prints extra info about transaction's members.
+     * 
+     * @param transactionInfo
+     * @return
+     * @throws CannotCreateTransactionException
+     */
+    public Transaction createTransaction(ArrayList<TransactionInfo> transactionInfo, Block targetBlock) throws CannotCreateTransactionException {
+        for (TransactionInfo transactionInfoItem : transactionInfo) {
+            System.out.println(getDisplayName() + " ==[" + transactionInfoItem.getAmount() + " PUTCoins]==> " + transactionInfoItem.getWallet().getDisplayName());
+        }
     
-        return new Transaction(this, receiver, amount, signature);
+        try {
+            return new Transaction(this, transactionInfo, targetBlock);
+        } catch (NoSuchAlgorithmException ex) {
+            Logger.getLogger(Wallet.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (InsufficientFundsException ex) {
+            Logger.getLogger(Wallet.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        
+        throw new CannotCreateTransactionException();
     }
 }

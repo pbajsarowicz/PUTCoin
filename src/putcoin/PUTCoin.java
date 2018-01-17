@@ -14,6 +14,12 @@ import java.security.PublicKey;
 import java.security.Signature;
 import java.security.SignatureException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import putcoin.exceptions.CannotCreateTransactionException;
+import putcoin.exceptions.ConfirmBlockException;
+import putcoin.exceptions.InsufficientFundsException;
 
 
 /**
@@ -21,58 +27,153 @@ import java.util.ArrayList;
  * @author piotrbajsarowicz
  */
 public class PUTCoin {
+    
+    public static void hehe(Block block, Wallet wallet) {
+        for (Transaction transaction : block.getTransactions()) {
+            // Add new UTXO (new outputs coming from new transactions)
+            for (Transaction.Output output : transaction.getOutputs()) {
+                if (
+                    output.getReceiver().getPubKey() == wallet.getPubKey() 
+                ) {
+                    System.out.println(wallet.getDisplayName() + " [+] o = " + output.getAmount());
+                }
+            }
+            
+            // Remove outputs associated with inputs for new transactions
+            for (Transaction.Input input : transaction.getInputs()) {
+                if (
+                    input.getOriginOutput().getReceiver().getPubKey() == wallet.getPubKey()
+                ) {
+                    System.out.println(wallet.getDisplayName() + "[-] i_o = " + input.getOriginOutput().getAmount());
+                }
+            }
+        }
+    }
 
     /**
      * @param args the command line arguments
      */
-    public static void main(String[] args) throws NoSuchAlgorithmException, InvalidKeyException, UnsupportedEncodingException, SignatureException, IOException {
-        // Initialize blockchain
-        Blockchain blockchain = Blockchain.getInstance();
-        
-        // Create first wallets
-        Wallet walletJohn = new Wallet("John");
-        Wallet walletGeorge = new Wallet("George");
-        
-        // Take care of genesis block
-        Genesis genesis = new Genesis();
-        // Send first PUTCoins to John
-        genesis.createGenesisTransaction(walletJohn, 20); 
-        
-        Block genesisBlock = genesis.createGenesisBlock();
-        blockchain.addBlock(genesisBlock);
-        
-        System.out.println("------------------------------------ genesisBlock");
-        walletJohn.getBalance();
-        walletGeorge.getBalance();
-        System.out.println("-------------------------------------------------");
+    public static void main(String[] args) {
+        try {            
+/////////// Initialize blockchain
+            Blockchain blockchain = Blockchain.getInstance();
+            
+/////////// Create first wallets
+            Wallet walletJohn = new Wallet("John");
+            Wallet walletGeorge = new Wallet("George");
+            Wallet walletEve = new Wallet("Eve");
 
-        
-        // New block
-        Block newBlock = new Block(genesisBlock, "NEW");
-        // [PASS] Correct transaction - it's supposed to pass
-        newBlock.addTransaction(walletJohn.createTransaction(walletGeorge, 4));
-        // [FAIL] Negative amount - should fail
-        newBlock.addTransaction(walletJohn.createTransaction(walletGeorge, -1));
-        // [FAIL] Amount greater than a balance
-        newBlock.addTransaction(walletJohn.createTransaction(walletGeorge, 27)); 
-        // [FAIL] George does not have PTC yet (block not confirmed (not in the blockchain))
-        newBlock.addTransaction(walletGeorge.createTransaction(walletJohn, 1)); 
-        blockchain.addBlock(newBlock);
-        System.out.println("---------------------------------------- newBlock");
-        walletJohn.getBalance();
-        walletGeorge.getBalance();
-        System.out.println("-------------------------------------------------");
-        
-        
-        // Another block
-        Block anotherBlock = new Block(genesisBlock, "NEW");
-        // Trying again with a last transaction (not confirmed with a first attempt)
-        anotherBlock.addTransaction(walletGeorge.createTransaction(walletJohn, 1)); // George does not have PTC yet (block not confirmed)
-        blockchain.addBlock(anotherBlock);
-        System.out.println("------------------------------------ anotherBlock");
-        walletJohn.getBalance();
-        walletGeorge.getBalance();
-        System.out.println("-------------------------------------------------");
+/////////// Genesis block
+            // Take care of genesis block
+            Genesis genesis = new Genesis();
+            // Create a genesis block
+            Block genesisBlock = genesis.createGenesisBlock();
+            // Send first PUTCoins to John
+            Transaction genesisTransaction = genesis.createGenesisTransaction(walletJohn, 20, genesisBlock);
+            genesisBlock.addTransaction(genesisTransaction);
+            // Confirm the genesis block 
+            blockchain.confirmBlock(genesisBlock);
+            
+            System.out.println("------------------------------------ genesisBlock");
+            walletJohn.getBalance();
+            walletGeorge.getBalance();
+            System.out.println("-------------------------------------------------");
+            
+/////////// New block and first transactions between folks
+            // New block - many transactions within a single block
+            Block newBlock = new Block(genesisBlock, "NEW");
+            
+            // [PASS] Correct transaction with one output - it's supposed to pass
+            ArrayList<TransactionInfo> transactionInfo = new ArrayList<TransactionInfo>(
+                Arrays.asList(
+                    new TransactionInfo(walletGeorge, 4)
+                )
+            );
+            Transaction newTransaction = walletJohn.createTransaction(transactionInfo, newBlock);
+            newBlock.addTransaction(newTransaction);
+
+            // [PASS] Correct transaction with many output
+            ArrayList<TransactionInfo> transactionInfo2 = new ArrayList<TransactionInfo>(
+                Arrays.asList(
+                    new TransactionInfo(walletGeorge, 1),
+                    new TransactionInfo(walletGeorge, 10)
+                )
+            );
+            Transaction newTransaction2 = walletJohn.createTransaction(transactionInfo2, newBlock);
+            newBlock.addTransaction(newTransaction2);
+            
+            // [PASS] George returns 1 PTC to John in a single transaction
+            ArrayList<TransactionInfo> transactionInfo3 = new ArrayList<TransactionInfo>(
+                Arrays.asList(
+                    new TransactionInfo(walletJohn, 1)
+                )
+            );
+            Transaction newTransaction3 = walletGeorge.createTransaction(transactionInfo3, newBlock);
+            newBlock.addTransaction(newTransaction3);
+            
+            // [PASS] ... and 5 PTC extra in two transactions
+            ArrayList<TransactionInfo> transactionInfo4 = new ArrayList<TransactionInfo>(
+                Arrays.asList(
+                    new TransactionInfo(walletJohn, 3),
+                    new TransactionInfo(walletJohn, 2)
+                )
+            );
+            Transaction newTransaction4 = walletGeorge.createTransaction(transactionInfo4, newBlock);
+            newBlock.addTransaction(newTransaction4);
+            
+            // Finally confirm a block
+            blockchain.confirmBlock(newBlock);
+            
+            System.out.println("---------------------------------------- newBlock");
+            walletJohn.getBalance();
+            walletGeorge.getBalance();
+            System.out.println("-------------------------------------------------");
+             
+/////////// Check unsuccessful cases for transactions
+/** This code raises exceptions (expected). Uncomment to check exception path cases.
+            Block anotherBlock = new Block(newBlock, "ANOTHER");
+            // [FAIL] Negative amount - should fail
+            ArrayList<TransactionInfo> transactionInfoF1 = new ArrayList<TransactionInfo>(
+                Arrays.asList(
+                    new TransactionInfo(walletGeorge, -1)
+                )
+            );
+            Transaction newTransactionF1 = walletJohn.createTransaction(transactionInfoF1, anotherBlock);
+            anotherBlock.addTransaction(newTransactionF1);
+            
+            // [FAIL] Amount greater than a balance
+            ArrayList<TransactionInfo> transactionInfoF2 = new ArrayList<TransactionInfo>(
+                Arrays.asList(
+                    new TransactionInfo(walletGeorge, 27)
+                )
+            );
+            Transaction newTransactionF2 = walletJohn.createTransaction(transactionInfoF2, anotherBlock);
+            anotherBlock.addTransaction(newTransactionF2);
+            
+            // [FAIL] Eve does not have PTC yet (block not confirmed (not in the blockchain))
+            ArrayList<TransactionInfo> transactionInfoF3 = new ArrayList<TransactionInfo>(
+                Arrays.asList(
+                    new TransactionInfo(walletGeorge, 1)
+                )
+            );
+            Transaction newTransactionF3 = walletEve.createTransaction(transactionInfoF3, anotherBlock);
+            anotherBlock.addTransaction(newTransactionF3);
+            
+            // Finally confirm an another block
+            blockchain.confirmBlock(anotherBlock);
+*/
+
+/////////// An attempt to double spend transactions (cofirm an already confirmed block)
+/** This code raises an exception (expected). Uncomment to see the actual behaviour
+            blockchain.confirmBlock(newBlock);
+*/
+        } catch (CannotCreateTransactionException ex) {
+            Logger.getLogger(PUTCoin.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (NoSuchAlgorithmException ex) {
+            Logger.getLogger(PUTCoin.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (ConfirmBlockException ex) {
+            Logger.getLogger(PUTCoin.class.getName()).log(Level.SEVERE, null, ex);
+        }
     }
     
 }

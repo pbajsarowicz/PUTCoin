@@ -14,6 +14,7 @@ import java.security.SignatureException;
 import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import putcoin.exceptions.InsufficientFundsException;
 
 /**
  *
@@ -21,43 +22,25 @@ import java.util.logging.Logger;
  */
 public class Genesis {
     private Transaction genesisTransaction;
-            
-//    public String generateHash(String message) throws NoSuchAlgorithmException {
-//        MessageDigest md;
-//        byte[] digest = null;
-//        
-//        md = MessageDigest.getInstance("SHA-256");
-//        digest = md.digest();
-//
-//        StringBuffer hexString = new StringBuffer();
-//        for (int i = 0; i < digest.length; i++) {
-//            hexString.append(Integer.toHexString(0xFF & digest[i]));
-//        }
-//        
-//        return hexString.toString();
-//    }
     
-    public void createGenesisTransaction(Wallet receiver, int amount) throws NoSuchAlgorithmException {        
-        String signature = "0";
-        
+    public Transaction createGenesisTransaction(Wallet receiver, int amount, Block targetBlock) throws NoSuchAlgorithmException {                
         System.out.println("Genesis Transaction ==[" + amount + "PUTCoins]==> " + receiver.getPubKey().hashCode());
         
-        this.genesisTransaction = new Transaction(null, receiver, amount, signature);
+        ArrayList<TransactionInfo> transactionInfo = new ArrayList<TransactionInfo>();
+        transactionInfo.add(new TransactionInfo(receiver, amount));
+        
+        try {
+            genesisTransaction = new Transaction(null, transactionInfo, targetBlock);
+        } catch (InsufficientFundsException ex) {
+            Logger.getLogger(Genesis.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        
+        return genesisTransaction;
     }
     
     public Block createGenesisBlock() throws NoSuchAlgorithmException {
-        try {
-            Block genesisBlock = new Block(null, "GENESIS");
-            genesisBlock.addTransaction(this.genesisTransaction);
+        Block genesisBlock = new Block(null, "GENESIS");
 
-            return genesisBlock;
-        } catch (InvalidKeyException ex) {
-            Logger.getLogger(Genesis.class.getName()).log(Level.SEVERE, null, ex);
-        } catch (IOException ex) {
-            Logger.getLogger(Genesis.class.getName()).log(Level.SEVERE, null, ex);
-        } catch (SignatureException ex) {
-            Logger.getLogger(Genesis.class.getName()).log(Level.SEVERE, null, ex);
-        }
-        return null;
+        return genesisBlock;
     }
 }

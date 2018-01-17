@@ -4,58 +4,144 @@
  * and open the template in the editor.
  */
 package putcoin;
-
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.PublicKey;
 import java.security.Signature;
 import java.security.SignatureException;
 import java.util.ArrayList;
-import sun.misc.BASE64Encoder;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import putcoin.exceptions.InsufficientFundsException;
 import sun.misc.BASE64Decoder;
+
+// Fixed reward za kopanie
+// Dodatkowy fee za transakcje + sortowanie transakcji po wartosci, i blokow po sumie wartosci transakcji
 
 /**
  *
  * @author piotrbajsarowicz
  */
 
-public class Transaction {
-//    private ArrayList input = new ArrayList();
-//    private ArrayList output = new ArrayList();
-//    private PublicKey sender;
-//    private PublicKey receiver;
+public final class Transaction {
+    private ArrayList<Input> inputs = new ArrayList<Input>();
+    private ArrayList<Output> outputs = new ArrayList<Output>();
     private Wallet sender;
-    private Wallet receiver;
-    private int amount;
+    private ArrayList<TransactionInfo> transactionInfo;
+    private int change;
     private String hash;
     private String signature;
+    
+    /**
+    * Defines input of a transaction.
+    */
+    class Input {
+        private String originTransactionHash;
+        private Output originOutput;
+        private String originSignature;
 
-    public Transaction(Wallet sender, Wallet receiver, int amount, String signature) throws NoSuchAlgorithmException {
+        public Input(Output output) {
+            this.originTransactionHash = output.transactionHash;
+            this.originSignature = output.signature;
+            this.originOutput = output;
+        }
+
+        public String getOriginTransactionHash() {
+            return originTransactionHash;
+        }
+
+        public String getOriginSignature() {
+            return originSignature;
+        }
+        
+        public Output getOriginOutput() {
+            return originOutput;
+        }
+    }
+    
+    /**
+    * Defines output of a transaction.
+    */
+    class Output {
+        private String transactionHash;
+        private int amount;
+        private String signature;
+        private Wallet receiver;
+        private Boolean isSpent = false;
+
+        public Output(TransactionInfo transactionInfo) {
+            this.transactionHash = hash;
+            this.receiver = transactionInfo.getWallet();
+            this.amount = transactionInfo.getAmount();
+            
+            if (!isGenesisTransaction()) {
+                sign();
+            }
+        }
+        
+        public Output(Wallet wallet, int amount) {
+            this.transactionHash = hash;
+            this.signature = signature;
+            this.receiver = wallet;
+            this.amount = amount;
+        }
+        
+        public int getAmount() {
+            return amount;
+        }
+        
+        public Wallet getReceiver() {
+            return receiver;
+        }
+        
+        public Boolean isSpent() {
+            return isSpent;
+        }
+        
+        public void spend() {
+            this.isSpent = true;
+        }
+        
+        public String getRawMessage() {
+            return sender.getPubKey() + ":" +
+                   receiver.getPubKey() + ":" +
+                   amount;
+        }
+        
+        public void sign() {
+            String transactionRaw = this.getRawMessage();
+            this.signature = sender.sign(transactionRaw);
+        }
+    }
+
+    /**
+     * Initializes a transaction object. Sets inputs and outpus.
+     * Generates a hash of the transaction.
+     * 
+     * @param sender
+     * @param transactionInfo
+     * @throws NoSuchAlgorithmException
+     * @throws InsufficientFundsException
+     */
+    public Transaction(Wallet sender, ArrayList<TransactionInfo> transactionInfo, Block targetBlock) throws NoSuchAlgorithmException, InsufficientFundsException {
         this.sender = sender;
-        this.receiver = receiver;
-        this.amount = amount;
-        this.hash = this.generateHash();
-        this.signature = signature;
+        this.transactionInfo = transactionInfo;
+        
+        this.hash = generateHash();
+        
+        if (sender != null) {
+            setInputs(targetBlock);
+            setOutputs();
+            sign();
+        } else {
+            setOutputs();
+//            sign();
+        }
     }
-
-    /**
-     * @return the amount
-     */
-    public int getAmount() {
-        return amount;
-    }
-
-    /**
-     * @param amount the amount to set
-     */
-    public void setAmount(int amount) {
-        this.amount = amount;
-    }
-
+    
     /**
      * @return the hash
      */
@@ -92,32 +178,156 @@ public class Transaction {
     }
     
     /**
-     * @return the receiver
+     * @return the inputs
      */
-    public Wallet getReceiver() {
-        return receiver;
+    public ArrayList<Input> getInputs() {
+        return inputs;
+    }
+
+    /**
+     * @return the outputs
+     */
+    public ArrayList<Output> getOutputs() {
+        return outputs;
     }
     
-    public String getMessage() {        
-        String message = this.receiver.getPubKey() + ":" +
-                         this.amount;
+    /**
+     *
+     * @return if it's a genesis transaction
+     */
+    public Boolean isGenesisTransaction() {
+        return sender == null;
+    }
+    
+    /**
+     * Signs a transaction with a sender's key.
+     */
+    public void sign() {
+        String transactionRaw = getRawMessage();
+        this.signature = sender.sign(transactionRaw);
+    }
+    
+    /**
+     * Calculates overall amount of a transaction.
+     * 
+     * @return an expected amount of a transaction
+     */
+    public int getAmount() {
+        int amount = 0;
         
-        if (this.sender == null) {
+        for (TransactionInfo transactionInfoItem : transactionInfo) {
+            amount += transactionInfoItem.getAmount();
+        }
+        
+        return amount;
+    }
+    
+    /**
+     * Calculates a total amount (a sum of amounts of origins of inputs (UTXO).
+     * Used for calculating a change.
+     * 
+     * @return a total amount of a transaction on input.
+     */
+    public int getTotalInputAmount() {
+        int totalInputAmount = 0;
+        
+        for (Input input : inputs) {
+            totalInputAmount += input.getOriginOutput().getAmount();
+        }
+        
+        return totalInputAmount;
+    }
+    
+    
+    /**
+     * Sets inputs of a transaction.
+     * Chooses UTXO to spend (creates inputs based on them) and links them
+     * with the inputs.
+     * Validates if a sender has enough funds to process the transaction.
+     * 
+     * It operates within a given block, so it includes transactions to be spent
+     * while choosing UTXO and validating a transaction's amount.
+     *
+     * @param targetBlock a block that a transaction is meant to be added to.
+     * @throws InsufficientFundsException
+     */
+    public final void setInputs(Block targetBlock) throws InsufficientFundsException {                
+        ArrayList<Output> UTXO = sender.getUTXOInBlock(targetBlock);
+        ArrayList<Input> potentialInputs = new ArrayList<Input>();
+        int totalInputAmount = 0;
+        int transactionAmount = getAmount();
+        
+        for (Output output : UTXO) {
+            totalInputAmount += output.amount;
+            potentialInputs.add(new Input(output));
+            
+            if (totalInputAmount >= transactionAmount) {
+                break;
+            }
+        }
+        
+        if (!(totalInputAmount >= transactionAmount)) {
+            throw new InsufficientFundsException();
+        }
+        
+        this.inputs = potentialInputs;
+    }
+    
+    /**
+     * Initializes outputs of a transactions.
+     * Sets amounts and receivers of transactions.
+     */
+    public final void setOutputs() {        
+        int totalInputAmount = getTotalInputAmount();
+        int transactionAmount = getAmount();
+        this.change = totalInputAmount - transactionAmount;
+        
+        for (TransactionInfo transactionInfoItem : transactionInfo) {
+            outputs.add(new Output(transactionInfoItem));
+        }
+        
+        // Keep the change
+        if (sender != null) {
+            outputs.add(new Output(sender, change));
+        }
+    }
+    
+    /**
+     * Returns a raw message that will be used for generating
+     * a transaction's hash.
+     * 
+     * @return a message to be hashed
+     */
+    public String getRawMessage() {      
+        ArrayList<Output> outputs = getOutputs();
+        String message = "";
+        
+        for (Output output : outputs) {
+            message += output.getRawMessage() + ":";
+        }
+        
+        if (isGenesisTransaction()) {
             return "genesis:" + message;
         } else {
             return this.sender.getPubKey() + ":" + message;
         }
     }
     
+    /**
+     * Generates a hash of a transaction.
+     * 
+     * @return a block's hash
+     * @throws NoSuchAlgorithmException
+     */
     public String generateHash() throws NoSuchAlgorithmException {
-        String valueToHash = this.getMessage() + ":" + this.signature;
+        String valueToHash = this.getRawMessage() + ":" + this.signature;
         
         MessageDigest md;
         byte[] digest = null;
         
         md = MessageDigest.getInstance("SHA-256");
         
-        if (sender != null) {
+        if (!isGenesisTransaction()) {
             md.update(sender.getPubKey().getEncoded());
         }
         
@@ -131,38 +341,69 @@ public class Transaction {
         return hexString.toString();
     }
     
-    public boolean verifySignature() throws InvalidKeyException, NoSuchAlgorithmException, UnsupportedEncodingException, IOException, SignatureException {
-        Signature sig = Signature.getInstance("SHA1WithRSA");
-        sig.initVerify(this.sender.getPubKey());
+    /**
+     * 
+     * @return if a signature is valid
+     */
+    public boolean verifySignature() {
+        try {
+            Signature sig = Signature.getInstance("SHA1WithRSA");
+            sig.initVerify(sender.getPubKey());
+            
+            byte[] messageData = getRawMessage().getBytes("UTF8");
+            sig.update(messageData);
+            
+            return sig.verify(new BASE64Decoder().decodeBuffer(signature));
+        } catch (NoSuchAlgorithmException ex) {
+            Logger.getLogger(Transaction.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (InvalidKeyException ex) {
+            Logger.getLogger(Transaction.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (UnsupportedEncodingException ex) {
+            Logger.getLogger(Transaction.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (SignatureException ex) {
+            Logger.getLogger(Transaction.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (IOException ex) {
+            Logger.getLogger(Transaction.class.getName()).log(Level.SEVERE, null, ex);
+        }
         
-        byte[] messageData = this.getMessage().getBytes("UTF8");
-        sig.update(messageData);
-        
-        return sig.verify(new BASE64Decoder().decodeBuffer(this.signature));
+        return false;
     }
     
-    public boolean verifyAmount() {
-        if (sender == null) {
+    /**
+     * Verfies if a sender has enough funds to process a transaction.
+     * It does it in the scope of a target block.
+     * 
+     * @return if an amount is correct
+     */
+    public boolean verifyAmount(Block block) {
+        int amount = getAmount();
+        
+        if (isGenesisTransaction()) {
             return amount > 0;
         } else {
             return (
                 amount > 0 &&
-                sender.getBalance(false) > amount 
+                sender.getBalanceForBlock(block) > amount 
             );
         }
     }
     
-    public Status verify() throws InvalidKeyException, NoSuchAlgorithmException, UnsupportedEncodingException, IOException, SignatureException {
+    /**
+     * 
+     * @return status of a verification of transaction
+     */
+    public Status verify(Block block) {
         boolean ok;
+        int amount = getAmount();
         String reason = "Verified transaction for " + amount + " PTC";
-        boolean isAmountCorrect = this.verifyAmount();
-        
-        if (sender == null) {
+        boolean isAmountCorrect = verifyAmount(block);
+
+        if (isGenesisTransaction()) {
             ok = isAmountCorrect;
         } else {
             ok = (
                 isAmountCorrect &&
-                this.verifySignature()
+                verifySignature()
             );
         }
         
@@ -175,5 +416,29 @@ public class Transaction {
         }
         
         return new Status(ok, reason);
+    }
+    
+    /**
+     * Protects against double spending.
+     */
+    public Boolean isSpend() {
+        for (Transaction.Input input : getInputs()) {
+            Transaction.Output output = input.getOriginOutput();
+            
+            if (output.isSpent()) {
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    /**
+     * Spends origins (outputs) of the transaction's inputs.
+     */
+    public void spend() {
+        for (Transaction.Input input : getInputs()) {
+            Transaction.Output output = input.getOriginOutput();
+            output.spend();
+        }
     }
 }
