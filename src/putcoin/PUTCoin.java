@@ -20,6 +20,7 @@ import java.util.logging.Logger;
 import putcoin.exceptions.CannotCreateTransactionException;
 import putcoin.exceptions.ConfirmBlockException;
 import putcoin.exceptions.InsufficientFundsException;
+import sun.nio.cs.ext.Johab;
 
 
 /**
@@ -28,28 +29,6 @@ import putcoin.exceptions.InsufficientFundsException;
  */
 public class PUTCoin {
     
-    public static void hehe(Block block, Wallet wallet) {
-        for (Transaction transaction : block.getTransactions()) {
-            // Add new UTXO (new outputs coming from new transactions)
-            for (Transaction.Output output : transaction.getOutputs()) {
-                if (
-                    output.getReceiver().getPubKey() == wallet.getPubKey() 
-                ) {
-                    System.out.println(wallet.getDisplayName() + " [+] o = " + output.getAmount());
-                }
-            }
-            
-            // Remove outputs associated with inputs for new transactions
-            for (Transaction.Input input : transaction.getInputs()) {
-                if (
-                    input.getOriginOutput().getReceiver().getPubKey() == wallet.getPubKey()
-                ) {
-                    System.out.println(wallet.getDisplayName() + "[-] i_o = " + input.getOriginOutput().getAmount());
-                }
-            }
-        }
-    }
-
     /**
      * @param args the command line arguments
      */
@@ -72,11 +51,12 @@ public class PUTCoin {
             Transaction genesisTransaction = genesis.createGenesisTransaction(walletJohn, 20, genesisBlock);
             genesisBlock.addTransaction(genesisTransaction);
             // Confirm the genesis block 
-            blockchain.confirmBlock(genesisBlock);
+            blockchain.addBlock(genesisBlock);
             
             System.out.println("------------------------------------ genesisBlock");
             walletJohn.getBalance();
             walletGeorge.getBalance();
+            walletEve.getBalance();
             System.out.println("-------------------------------------------------");
             
 /////////// New block and first transactions between folks
@@ -122,11 +102,30 @@ public class PUTCoin {
             newBlock.addTransaction(newTransaction4);
             
             // Finally confirm a block
-            blockchain.confirmBlock(newBlock);
+            walletEve.confirmBlock(newBlock);
             
             System.out.println("---------------------------------------- newBlock");
             walletJohn.getBalance();
             walletGeorge.getBalance();
+            walletEve.getBalance();
+            System.out.println("-------------------------------------------------");
+
+////////////
+            Block newBlock0 = new Block(newBlock, "NEW0");
+            
+            ArrayList<TransactionInfo> transactionInfo0 = new ArrayList<TransactionInfo>(
+                Arrays.asList(
+                    new TransactionInfo(walletGeorge, 50)
+                )
+            );
+            Transaction newTransaction0 = walletEve.createTransaction(transactionInfo0, newBlock);
+            newBlock0.addTransaction(newTransaction0);
+            walletGeorge.confirmBlock(newBlock0);
+            
+            System.out.println("---------------------------------------- newBlock");
+            walletJohn.getBalance();
+            walletGeorge.getBalance();
+            walletEve.getBalance();
             System.out.println("-------------------------------------------------");
              
 /////////// Check unsuccessful cases for transactions

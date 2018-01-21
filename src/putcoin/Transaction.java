@@ -34,6 +34,7 @@ public final class Transaction {
     private int change;
     private String hash;
     private String signature;
+    private Boolean isCommisson = false;
     
     /**
     * Defines input of a transaction.
@@ -123,6 +124,7 @@ public final class Transaction {
      * 
      * @param sender
      * @param transactionInfo
+     * @param targetBlock
      * @throws NoSuchAlgorithmException
      * @throws InsufficientFundsException
      */
@@ -140,6 +142,21 @@ public final class Transaction {
             setOutputs();
 //            sign();
         }
+    }
+    
+    /**
+     * Handles commisson transaction for confirming a block.
+     * 
+     * @param sender
+     * @param transactionInfo
+     * @param targetBlock
+     * @param isCommisson 
+     * @throws NoSuchAlgorithmException
+     * @throws InsufficientFundsException
+     */
+    public Transaction(Wallet sender, ArrayList<TransactionInfo> transactionInfo, Block targetBlock, Boolean isCommisson) throws NoSuchAlgorithmException, InsufficientFundsException {
+        this(sender, transactionInfo, targetBlock);
+        this.isCommisson = isCommisson;
     }
     
     /**
@@ -189,6 +206,13 @@ public final class Transaction {
      */
     public ArrayList<Output> getOutputs() {
         return outputs;
+    }
+    
+    /**
+     * @return the isCommisson
+     */
+    public Boolean isCommisson() {
+        return isCommisson;
     }
     
     /**
@@ -383,7 +407,7 @@ public final class Transaction {
         } else {
             return (
                 amount > 0 &&
-                sender.getBalanceForBlock(block) > amount 
+                sender.getBalanceForBlock(block) >= amount 
             );
         }
     }
@@ -426,10 +450,10 @@ public final class Transaction {
             Transaction.Output output = input.getOriginOutput();
             
             if (output.isSpent()) {
-                return false;
+                return true;
             }
         }
-        return true;
+        return false;
     }
     
     /**

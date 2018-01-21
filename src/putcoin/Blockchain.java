@@ -21,6 +21,7 @@ import putcoin.exceptions.ConfirmBlockException;
 public class Blockchain {
     private static Blockchain instance = null;
     private ArrayList<Block> blocks = new ArrayList<Block>();
+    public static final int COMMISSION = 50;
     
     protected Blockchain() {}
     
@@ -31,7 +32,7 @@ public class Blockchain {
         return instance;
     }
 
-    public boolean confirmBlock(Block block) throws ConfirmBlockException {
+    public boolean addBlock(Block block) throws ConfirmBlockException {
         if (
             block.getDisplayName() != "GENESIS" &&
             !this.validateBlock(block)
@@ -62,9 +63,13 @@ public class Blockchain {
     
     public Boolean validateBlock(Block block) {
         for (Transaction transaction : block.getTransactions()) {
-            Boolean status = (
-                transaction.verifySignature() && transaction.isSpend()
-            );
+            Boolean status = false;
+            
+            if (transaction.isCommisson()) {
+                status = !transaction.isSpend();
+            } else {
+                status = transaction.verifySignature() && !transaction.isSpend();
+            }
 
             if (!status) {
                 System.out.println("CANNOT CONFIRM BLOCK");

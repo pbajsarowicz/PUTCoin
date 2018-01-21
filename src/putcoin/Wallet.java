@@ -18,9 +18,11 @@ import java.security.PublicKey;
 import java.security.Signature;
 import java.security.SignatureException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import putcoin.exceptions.CannotCreateTransactionException;
+import putcoin.exceptions.ConfirmBlockException;
 import putcoin.exceptions.InsufficientFundsException;
 import sun.misc.BASE64Encoder;
 import sun.misc.BASE64Decoder;
@@ -282,5 +284,31 @@ public class Wallet {
         }
         
         throw new CannotCreateTransactionException();
+    }
+    
+    private void commisson(Block block) {
+        try {
+            ArrayList<TransactionInfo> commissionTransactionInfo = new ArrayList<TransactionInfo>(
+                Arrays.asList(
+                    new TransactionInfo(this, Blockchain.COMMISSION)
+                )
+            );
+            Transaction commissionTransaction = new Transaction(null, commissionTransactionInfo, block, true);
+            block.addTransaction(commissionTransaction);
+            System.out.println("COMMISSON ==[" + Blockchain.COMMISSION + " PUTCoins]==> " + getDisplayName() + "(for BLOCK CONFIRMATION)");
+        
+        } catch (NoSuchAlgorithmException ex) {
+            Logger.getLogger(PUTCoin.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (InsufficientFundsException ex) {
+            Logger.getLogger(PUTCoin.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
+    
+    public void confirmBlock(Block block) throws ConfirmBlockException {
+        Blockchain blockchain = Blockchain.getInstance();
+        
+        commisson(block);
+        
+        blockchain.addBlock(block);
     }
 }
