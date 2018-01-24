@@ -5,11 +5,8 @@
  */
 package putcoin;
 
-import java.io.IOException;
-import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.SignatureException;
 import java.util.ArrayList;
 import java.util.Random;
 import java.util.logging.Level;
@@ -27,7 +24,7 @@ public class Block {
     private Block previousBlock;
     private String displayName;
     
-    private int TARGET_THRESHOLD = 10000001;
+    private int TARGET_THRESHOLD = 290;
 
     /**
      *
@@ -101,7 +98,7 @@ public class Block {
     }
     
     /**
-     * Lack of a previous block means the genesis block.
+     * Lack of a previous block means it's a genesis block.
      * 
      * @return if a block is a genesis
      */
@@ -124,47 +121,91 @@ public class Block {
      * Generates a hash of a block.
      * 
      * @return a block's hash
-     * @throws NoSuchAlgorithmException
      */
-    public String generateHash() throws NoSuchAlgorithmException {
-        MessageDigest md;
-        byte[] digest = null;
-        
-        String rawMessage = getRawMessage();
-        
-        md = MessageDigest.getInstance("SHA-256");
-        md.update(rawMessage.getBytes());
-        digest = md.digest();
-        
-        StringBuffer hexString = new StringBuffer();
-        
-        for (int i = 0; i < digest.length; i++) {
-            hexString.append(Integer.toHexString(0xFF & digest[i]));
-        }
-        
-        return hexString.toString();
+    public String generateHash() {
+        return generateHash("");
     }
     
     /**
-     * Generates a nonce as long as it's lower or equal to target threshold.
+     * Generates a hash of a block.
+     * 
+     * @param message used for nonce generation
+     * @return a block's hash
+     */
+    public String generateHash(String message) {
+        try {
+            String rawMessage = "".equals(message) ? getRawMessage() : message;
+            MessageDigest md;
+            byte[] digest = null;
+            
+            md = MessageDigest.getInstance("SHA-256");
+            md.update(rawMessage.getBytes());
+            digest = md.digest();
+            
+            StringBuffer hexString = new StringBuffer();
+            
+            for (int i = 0; i < digest.length; i++) {
+                hexString.append(Integer.toHexString(0xFF & digest[i]));
+            }
+            
+            return hexString.toString();
+        } catch (NoSuchAlgorithmException ex) {
+            Logger.getLogger(Block.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        return "";
+    }
+
+    /**
+     * Generates a nonce as long as it's lower than a target threshold.
+     * It generates a random 8 characters long number (nonce candidate) and
+     * add it to the block's hash. Then generates a hash of it (converted
+     * to String), calculates a sum of all numeric characters being part of
+     * that hash and finally, it checks if it's higher than TARGET_THRESHOLD.
+     * 
+     * e.g.
+     * hash = `d389759084e819873f8388a7997f92f8b9b87488a6989911dd637a80281a4a99`
+     * sum = 311
      * 
      * @return
      */
     public int generateNonce() {
+        TARGET_THRESHOLD += Blockchain.getInstance().getBlocks().size();
+        
         Random random = new Random();
-        int nonce = TARGET_THRESHOLD;
+        int _nonce;
         
         long startTime = System.currentTimeMillis();
         
-        while (nonce >= TARGET_THRESHOLD) {
-            nonce = nonce = 10000000 + random.nextInt(90000000);
+        while (true) {
+            _nonce = 10000000 + random.nextInt(90000000);
+            String _hash = generateHash(blockHash + _nonce);
+            
+            try {
+                char character;
+                int count = 0;
+                for(int i=0; i<_hash.length(); i++) {
+                    character  = _hash.charAt(i);
+                    
+                    try {
+                        count = count + Integer.parseInt(_hash.valueOf(character));
+                    } catch(NumberFormatException e) {
+                        continue;
+                    }
+                }
+                
+                if (count > TARGET_THRESHOLD) {
+                    break;
+                }
+            } catch(NumberFormatException e) {
+                continue;
+            }
         }
         
         long estimatedTime = System.currentTimeMillis() - startTime;
+        Utils.log("\n");
+        Utils.log("nonce = " + _nonce + " (it took " + estimatedTime/ (double) 1000 + "s to find it)");
         
-        System.out.println("nonce = " + nonce + " (it took " + estimatedTime/ (double) 1000 + "s to find it)");
-        
-        return nonce;
+        return _nonce;
     }
     
     /**
@@ -195,7 +236,7 @@ public class Block {
         
         rejectedTransactions.add(transaction);
         
-        System.err.println(
+        Utils.log(
             status.getReason() +
             "Transaction has been rejected and won't be included in the block."
         );

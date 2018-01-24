@@ -5,10 +5,7 @@
  */
 package putcoin;
 
-import java.io.IOException;
-import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
-import java.security.SignatureException;
 import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -21,7 +18,8 @@ import putcoin.exceptions.ConfirmBlockException;
 public class Blockchain {
     private static Blockchain instance = null;
     private ArrayList<Block> blocks = new ArrayList<Block>();
-    public static final int COMMISSION = 50;
+    private ArrayList<Block> unconfirmedBlocks = new ArrayList<Block>();
+    public static final int REWARD = 50;
     
     protected Blockchain() {}
     
@@ -32,12 +30,17 @@ public class Blockchain {
         return instance;
     }
 
+    public ArrayList<Block> getUnconfirmedBlocks() {
+        return unconfirmedBlocks;
+    }
+    
+
     public boolean addBlock(Block block) throws ConfirmBlockException {
         if (
             block.getDisplayName() != "GENESIS" &&
             !this.validateBlock(block)
         ) {
-            System.out.println("A block validation failed. Cannot add the block to the blockchain");
+            Utils.log("A block validation failed. Cannot add the block to the blockchain");
             
             throw new ConfirmBlockException();
         } else {
@@ -45,12 +48,13 @@ public class Blockchain {
                 block.setNonce();
                 block.setBlockHash();
                 blocks.add(block);
+                unconfirmedBlocks.remove(block);
                 
                 for (Transaction transaction : block.getTransactions()) {
                     transaction.spend();
                 }
                 
-                System.out.println("Successfully added a block to the blockchain");
+                Utils.log("Successfully added a block to the blockchain");
                 
                 return true;
             } catch (NoSuchAlgorithmException ex) {
@@ -65,14 +69,14 @@ public class Blockchain {
         for (Transaction transaction : block.getTransactions()) {
             Boolean status = false;
             
-            if (transaction.isCommisson()) {
-                status = !transaction.isSpend();
+            if (transaction.isReward()) {
+                status = !transaction.isSpent();
             } else {
-                status = transaction.verifySignature() && !transaction.isSpend();
+                status = transaction.verifySignature() && !transaction.isSpent();
             }
 
             if (!status) {
-                System.out.println("CANNOT CONFIRM BLOCK");
+                Utils.log("CANNOT CONFIRM BLOCK " + block.getDisplayName());
                 return false;
             }
         };
@@ -84,5 +88,12 @@ public class Blockchain {
      */
     public ArrayList<Block> getBlocks() {
         return blocks;
+    }
+    
+    /**
+     * @return the block
+     */
+    public Block getLastBlock() {
+        return blocks.get(blocks.size() - 1);
     }
 }

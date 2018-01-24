@@ -114,7 +114,6 @@ public class Wallet {
             Logger.getLogger(Wallet.class.getName()).log(Level.SEVERE, null, ex);
         }
         
-        // Throw an exception
         return null;
     }
     
@@ -156,7 +155,7 @@ public class Wallet {
      * 
      * @return UTXO
      */
-    public ArrayList getUTXOInBlockchain() {
+    public ArrayList<Transaction.Output> getUTXOInBlockchain() {
         Blockchain blockchain = Blockchain.getInstance();
         ArrayList<Transaction.Output> UTXO = new ArrayList<Transaction.Output>();
         
@@ -178,15 +177,15 @@ public class Wallet {
     
     /**
      * Returns Unspent Transaction Outputs (UTXO) in the scope of a block.
-     * It enables generating transactions to be confirmed that depend on
-     * each other, e.g.: two transaction in one package (block) to be confirmed:
+     * It enables generating transactions to be confirmed that depend on each
+     * other, e.g.: two transactions in one package (block) to be confirmed:
      * A ==[1 PTC]==> X
      * X ==[1 PTC]==> B
      * 
      * @return UTXO
      */
     
-    public ArrayList getUTXOInBlock(Block block) {
+    public ArrayList<Transaction.Output> getUTXOInBlock(Block block) {
         ArrayList<Transaction.Output> UTXO = getUTXOInBlockchain();
         
 
@@ -236,10 +235,6 @@ public class Wallet {
         for (Transaction.Output output : transactionsOutputsToSpend) {
             balance += output.getAmount();
         }
-
-        if (prompt) {
-            System.out.println("| [" + getDisplayName() + "] " + balance);
-        }
         
         return balance;
     }
@@ -262,6 +257,8 @@ public class Wallet {
                amount;
     }
     
+    
+    
     /**
      * Creates a transaction object.
      * Prints extra info about transaction's members.
@@ -270,32 +267,30 @@ public class Wallet {
      * @return
      * @throws CannotCreateTransactionException
      */
-    public Transaction createTransaction(ArrayList<TransactionInfo> transactionInfo, Block targetBlock) throws CannotCreateTransactionException {
+    public Transaction createTransaction(ArrayList<TransactionInfo> transactionInfo) throws CannotCreateTransactionException, InsufficientFundsException {
         for (TransactionInfo transactionInfoItem : transactionInfo) {
-            System.out.println(getDisplayName() + " ==[" + transactionInfoItem.getAmount() + " PUTCoins]==> " + transactionInfoItem.getWallet().getDisplayName());
+            Utils.log(getDisplayName() + " ==[" + transactionInfoItem.getAmount() + " PTC]==> " + transactionInfoItem.getReceiver().getDisplayName());
         }
     
         try {
-            return new Transaction(this, transactionInfo, targetBlock);
+            return new Transaction(transactionInfo);
         } catch (NoSuchAlgorithmException ex) {
-            Logger.getLogger(Wallet.class.getName()).log(Level.SEVERE, null, ex);
-        } catch (InsufficientFundsException ex) {
             Logger.getLogger(Wallet.class.getName()).log(Level.SEVERE, null, ex);
         }
         
         throw new CannotCreateTransactionException();
     }
     
-    private void commisson(Block block) {
+    private void reward(Block block) {
         try {
-            ArrayList<TransactionInfo> commissionTransactionInfo = new ArrayList<TransactionInfo>(
+            ArrayList<TransactionInfo> rewardTransactionInfo = new ArrayList<TransactionInfo>(
                 Arrays.asList(
-                    new TransactionInfo(this, Blockchain.COMMISSION)
+                    new TransactionInfo(null, this, Blockchain.REWARD, block)
                 )
             );
-            Transaction commissionTransaction = new Transaction(null, commissionTransactionInfo, block, true);
-            block.addTransaction(commissionTransaction);
-            System.out.println("COMMISSON ==[" + Blockchain.COMMISSION + " PUTCoins]==> " + getDisplayName() + "(for BLOCK CONFIRMATION)");
+            Transaction rewardTransaction = new Transaction(rewardTransactionInfo, true);
+            block.addTransaction(rewardTransaction);
+            Utils.log("REWARD ==[" + Blockchain.REWARD + " PTC]==> " + getDisplayName() + "(for BLOCK CONFIRMATION)");
         
         } catch (NoSuchAlgorithmException ex) {
             Logger.getLogger(PUTCoin.class.getName()).log(Level.SEVERE, null, ex);
@@ -307,7 +302,7 @@ public class Wallet {
     public void confirmBlock(Block block) throws ConfirmBlockException {
         Blockchain blockchain = Blockchain.getInstance();
         
-        commisson(block);
+        reward(block);
         
         blockchain.addBlock(block);
     }

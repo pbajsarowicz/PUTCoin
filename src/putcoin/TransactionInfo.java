@@ -10,19 +10,38 @@ package putcoin;
  * @author piotrbajsarowicz
  */
 public class TransactionInfo {
-    private Wallet wallet;
+    private Wallet sender;
+    private Wallet receiver;
     private int amount;
+    private Block targetBlock;
 
-    public TransactionInfo(Wallet wallet, int amount) {
-        this.wallet = wallet;
+    public TransactionInfo(Wallet sender, Wallet receiver, int amount, Block targetBlock) {
+        this.sender = sender;
+        this.receiver = receiver;
         this.amount = amount;
+        this.targetBlock = targetBlock;
     }
 
     /**
-     * @return the wallet
+     * @return the sender
      */
-    public Wallet getWallet() {
-        return wallet;
+    public Wallet getSender() {
+        return sender;
+    }
+    
+    /**
+     * @return the receiver
+     */
+    public Wallet getReceiver() {
+        return receiver;
+    }
+
+    /**
+     *
+     * @param receiver
+     */
+    public void setReceiver(Wallet receiver) {
+        this.receiver = receiver;
     }
 
     /**
@@ -30,5 +49,12 @@ public class TransactionInfo {
      */
     public int getAmount() {
         return amount;
-    }    
+    }
+    
+    /**
+     * @return the targetBlock
+     */
+    public Block getTargetBlock() {
+        return targetBlock;
+    }
 }

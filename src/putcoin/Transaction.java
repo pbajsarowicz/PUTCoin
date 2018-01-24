@@ -18,9 +18,6 @@ import java.util.logging.Logger;
 import putcoin.exceptions.InsufficientFundsException;
 import sun.misc.BASE64Decoder;
 
-// Fixed reward za kopanie
-// Dodatkowy fee za transakcje + sortowanie transakcji po wartosci, i blokow po sumie wartosci transakcji
-
 /**
  *
  * @author piotrbajsarowicz
@@ -34,7 +31,7 @@ public final class Transaction {
     private int change;
     private String hash;
     private String signature;
-    private Boolean isCommisson = false;
+    private Boolean reward = false;
     
     /**
     * Defines input of a transaction.
@@ -75,7 +72,7 @@ public final class Transaction {
 
         public Output(TransactionInfo transactionInfo) {
             this.transactionHash = hash;
-            this.receiver = transactionInfo.getWallet();
+            this.receiver = transactionInfo.getReceiver();
             this.amount = transactionInfo.getAmount();
             
             if (!isGenesisTransaction()) {
@@ -88,6 +85,10 @@ public final class Transaction {
             this.signature = signature;
             this.receiver = wallet;
             this.amount = amount;
+        }
+        
+        public String getTransactionHash() {
+            return transactionHash;
         }
         
         public int getAmount() {
@@ -106,6 +107,14 @@ public final class Transaction {
             this.isSpent = true;
         }
         
+        public Wallet getSender() {
+            return sender;
+        }
+        
+        public Boolean isReward() {
+            return reward;
+        }
+        
         public String getRawMessage() {
             return sender.getPubKey() + ":" +
                    receiver.getPubKey() + ":" +
@@ -122,19 +131,22 @@ public final class Transaction {
      * Initializes a transaction object. Sets inputs and outpus.
      * Generates a hash of the transaction.
      * 
-     * @param sender
      * @param transactionInfo
-     * @param targetBlock
      * @throws NoSuchAlgorithmException
      * @throws InsufficientFundsException
      */
-    public Transaction(Wallet sender, ArrayList<TransactionInfo> transactionInfo, Block targetBlock) throws NoSuchAlgorithmException, InsufficientFundsException {
-        this.sender = sender;
+    public Transaction(ArrayList<TransactionInfo> transactionInfo) throws NoSuchAlgorithmException, InsufficientFundsException {
+        this.sender = transactionInfo.get(0).getSender();
         this.transactionInfo = transactionInfo;
+        Block targetBlock = transactionInfo.get(0).getTargetBlock();
         
         this.hash = generateHash();
         
         if (sender != null) {
+            // Takes a targetBlock to enable generating transactions to be confirmed that depend on
+            // each other, e.g.: two transactions in one package (block) to be confirmed:
+            // A ==[1 PTC]==> X
+            // X ==[1 PTC]==> B
             setInputs(targetBlock);
             setOutputs();
             sign();
@@ -145,18 +157,16 @@ public final class Transaction {
     }
     
     /**
-     * Handles commisson transaction for confirming a block.
+     * Handles reward transaction for confirming a block.
      * 
-     * @param sender
      * @param transactionInfo
-     * @param targetBlock
-     * @param isCommisson 
+     * @param isReward 
      * @throws NoSuchAlgorithmException
      * @throws InsufficientFundsException
      */
-    public Transaction(Wallet sender, ArrayList<TransactionInfo> transactionInfo, Block targetBlock, Boolean isCommisson) throws NoSuchAlgorithmException, InsufficientFundsException {
-        this(sender, transactionInfo, targetBlock);
-        this.isCommisson = isCommisson;
+    public Transaction(ArrayList<TransactionInfo> transactionInfo, Boolean isReward) throws NoSuchAlgorithmException, InsufficientFundsException {
+        this(transactionInfo);
+        this.reward = isReward;
     }
     
     /**
@@ -209,10 +219,10 @@ public final class Transaction {
     }
     
     /**
-     * @return the isCommisson
+     * @return the reward
      */
-    public Boolean isCommisson() {
-        return isCommisson;
+    public Boolean isReward() {
+        return reward;
     }
     
     /**
@@ -304,7 +314,7 @@ public final class Transaction {
     public final void setOutputs() {        
         int totalInputAmount = getTotalInputAmount();
         int transactionAmount = getAmount();
-        this.change = totalInputAmount - transactionAmount;
+        int change = totalInputAmount - transactionAmount;
         
         for (TransactionInfo transactionInfoItem : transactionInfo) {
             outputs.add(new Output(transactionInfoItem));
@@ -445,7 +455,7 @@ public final class Transaction {
     /**
      * Protects against double spending.
      */
-    public Boolean isSpend() {
+    public Boolean isSpent() {
         for (Transaction.Input input : getInputs()) {
             Transaction.Output output = input.getOriginOutput();
             

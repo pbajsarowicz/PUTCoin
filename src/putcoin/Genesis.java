@@ -5,12 +5,7 @@
  */
 package putcoin;
 
-import java.io.IOException;
-import java.security.InvalidKeyException;
-import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.PublicKey;
-import java.security.SignatureException;
 import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -21,16 +16,19 @@ import putcoin.exceptions.InsufficientFundsException;
  * @author piotrbajsarowicz
  */
 public class Genesis {
+    private Block genesisBlock;
     private Transaction genesisTransaction;
     
-    public Transaction createGenesisTransaction(Wallet receiver, int amount, Block targetBlock) throws NoSuchAlgorithmException {                
-        System.out.println("Genesis Transaction ==[" + amount + "PUTCoins]==> " + receiver.getPubKey().hashCode());
-        
+    public Transaction createGenesisTransaction(Wallet receiver) throws NoSuchAlgorithmException {                
+        Blockchain blockchain = Blockchain.getInstance();
         ArrayList<TransactionInfo> transactionInfo = new ArrayList<TransactionInfo>();
-        transactionInfo.add(new TransactionInfo(receiver, amount));
+        
+        transactionInfo.add(new TransactionInfo(null, receiver, blockchain.REWARD, genesisBlock));
+        
+        Utils.log("Genesis Transaction ==[" + blockchain.REWARD + " PTC]==> " + receiver.getDisplayName());
         
         try {
-            genesisTransaction = new Transaction(null, transactionInfo, targetBlock);
+            genesisTransaction = new Transaction(transactionInfo);
         } catch (InsufficientFundsException ex) {
             Logger.getLogger(Genesis.class.getName()).log(Level.SEVERE, null, ex);
         }
@@ -39,7 +37,7 @@ public class Genesis {
     }
     
     public Block createGenesisBlock() throws NoSuchAlgorithmException {
-        Block genesisBlock = new Block(null, "GENESIS");
+        genesisBlock = new Block(null, "GENESIS");
 
         return genesisBlock;
     }
