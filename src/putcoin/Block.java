@@ -118,12 +118,24 @@ public class Block {
     }
     
     /**
+     * Allows to provide extra nonce. It's being used while generating a nonce.
+     * 
+     * @param _nonce
+     * @return a message to be hashed
+     */
+    public String getRawMessage(int _nonce) {
+        return getPreviousBlockHash() + ":" +
+               transactions + ":" +
+               _nonce;
+    }
+    
+    /**
      * Generates a hash of a block.
      * 
      * @return a block's hash
      */
     public String generateHash() {
-        return generateHash("");
+        return generateHash(0);
     }
     
     /**
@@ -132,9 +144,11 @@ public class Block {
      * @param message used for nonce generation
      * @return a block's hash
      */
-    public String generateHash(String message) {
+    public String generateHash(int _nonce) {
         try {
-            String rawMessage = "".equals(message) ? getRawMessage() : message;
+            String rawMessage = (
+                _nonce == 0 ? getRawMessage() : getRawMessage(_nonce)
+            );
             MessageDigest md;
             byte[] digest = null;
             
@@ -178,7 +192,7 @@ public class Block {
         
         while (true) {
             _nonce = 10000000 + random.nextInt(90000000);
-            String _hash = generateHash(blockHash + _nonce);
+            String _hash = generateHash(_nonce);
             
             try {
                 char character;
