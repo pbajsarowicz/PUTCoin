@@ -267,13 +267,13 @@ public class Wallet {
      * @return
      * @throws CannotCreateTransactionException
      */
-    public Transaction createTransaction(ArrayList<TransactionInfo> transactionInfo) throws CannotCreateTransactionException, InsufficientFundsException {
+    public Transaction createTransaction(ArrayList<TransactionInfo> transactionInfo, Wallet confirmingWallet) throws CannotCreateTransactionException, InsufficientFundsException {
         for (TransactionInfo transactionInfoItem : transactionInfo) {
             Utils.log(getDisplayName() + " ==[" + transactionInfoItem.getAmount() + " PTC]==> " + transactionInfoItem.getReceiver().getDisplayName());
         }
     
         try {
-            return new Transaction(transactionInfo);
+            return new Transaction(transactionInfo, confirmingWallet);
         } catch (NoSuchAlgorithmException ex) {
             Logger.getLogger(Wallet.class.getName()).log(Level.SEVERE, null, ex);
         }

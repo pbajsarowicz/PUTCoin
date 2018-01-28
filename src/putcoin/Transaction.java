@@ -27,11 +27,13 @@ public final class Transaction {
     private ArrayList<Input> inputs = new ArrayList<Input>();
     private ArrayList<Output> outputs = new ArrayList<Output>();
     private Wallet sender;
+    private Wallet confirmingWallet;
     private ArrayList<TransactionInfo> transactionInfo;
     private int change;
     private String hash;
     private String signature;
     private Boolean reward = false;
+    private static int COMMISION_PERCENTAGE = 10;
     
     /**
     * Defines input of a transaction.
@@ -69,6 +71,9 @@ public final class Transaction {
         private String signature;
         private Wallet receiver;
         private Boolean isSpent = false;
+        // Indicates an output that is a bonus for a wallet confirming a block
+        // in the case when total amount of inputs > outputs
+        private Boolean isCommission = false;  
 
         public Output(TransactionInfo transactionInfo) {
             this.transactionHash = hash;
@@ -87,6 +92,11 @@ public final class Transaction {
             this.amount = amount;
         }
         
+        public Output(TransactionInfo transactionInfo, Boolean isCommission) {
+            this(transactionInfo);
+            this.isCommission = isCommission;
+        }
+        
         public String getTransactionHash() {
             return transactionHash;
         }
@@ -98,6 +108,11 @@ public final class Transaction {
         public Wallet getReceiver() {
             return receiver;
         }
+        
+        public Boolean isCommission() {
+            return isCommission;
+        }
+        
         
         public Boolean isSpent() {
             return isSpent;
@@ -152,7 +167,29 @@ public final class Transaction {
             sign();
         } else {
             setOutputs();
-//            sign();
+        }
+    }
+    /**
+     * Handles commission transaction for confirming a block.
+     */
+    public Transaction(ArrayList<TransactionInfo> transactionInfo, Wallet confirmingWallet) throws NoSuchAlgorithmException, InsufficientFundsException {
+        this.confirmingWallet = confirmingWallet;
+        this.sender = transactionInfo.get(0).getSender();
+        this.transactionInfo = transactionInfo;
+        Block targetBlock = transactionInfo.get(0).getTargetBlock();
+        
+        this.hash = generateHash();
+        
+        if (sender != null) {
+            // Takes a targetBlock to enable generating transactions to be confirmed that depend on
+            // each other, e.g.: two transactions in one package (block) to be confirmed:
+            // A ==[1 PTC]==> X
+            // X ==[1 PTC]==> B
+            setInputs(targetBlock);
+            setOutputs();
+            sign();
+        } else {
+            setOutputs();
         }
     }
     
@@ -314,7 +351,22 @@ public final class Transaction {
     public final void setOutputs() {        
         int totalInputAmount = getTotalInputAmount();
         int transactionAmount = getAmount();
-        int change = totalInputAmount - transactionAmount;
+        change = totalInputAmount - transactionAmount;
+        
+        if (change > 0) {
+            // Prepare commission output
+            int commission = (int)(change*(COMMISION_PERCENTAGE/100.0f));
+            
+            if (commission > 0) {
+                change -= commission;
+                Block targetBlock = transactionInfo.get(0).getTargetBlock();
+                TransactionInfo commissionTransactionInfo = new TransactionInfo(
+                    sender, confirmingWallet, commission, targetBlock
+                );
+
+                outputs.add(new Output(commissionTransactionInfo, true));
+            }
+        }
         
         for (TransactionInfo transactionInfoItem : transactionInfo) {
             outputs.add(new Output(transactionInfoItem));

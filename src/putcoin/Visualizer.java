@@ -53,9 +53,10 @@ public class Visualizer extends Thread {
                         } else {
                             msg += "[" + output.getTransactionHash() + "] Genesis Transaction ==[" + Blockchain.REWARD + "PUTCoins]==> " + output.getReceiver().getDisplayName();
                         }
+                    }  else if (output.isCommission()) {
+                        msg += "[" + output.getTransactionHash() + "][COMMISSION] " + output.getSender().getDisplayName() + " ==[" + output.getAmount() + " PTC]==> " + output.getReceiver().getDisplayName();
                     } else {
-                        msg += "[" + output.getTransactionHash() + "] " + output.getSender().getDisplayName() + " ==[" + output.getAmount() + " PTC]==> " + output.getReceiver().getDisplayName();
-                                
+                        msg += "[" + output.getTransactionHash() + "] " + output.getSender().getDisplayName() + " ==[" + output.getAmount() + " PTC]==> " + output.getReceiver().getDisplayName();          
                     }
                     
                     System.out.println(msg);
@@ -92,6 +93,8 @@ public class Visualizer extends Thread {
                     } else {
                         msg += "[" + output.getTransactionHash() + "] Genesis Transaction ==[" + Blockchain.REWARD + "PUTCoins]==> " + output.getReceiver().getDisplayName();
                     }
+                }  else if (output.isCommission()) {
+                    msg += "[" + output.getTransactionHash() + "][COMMISSION] " + output.getSender().getDisplayName() + " ==[" + output.getAmount() + " PTC]==> " + output.getReceiver().getDisplayName();
                 } else {
                     msg += "[" + output.getTransactionHash() + "] " + output.getSender().getDisplayName() + " ==[" + output.getAmount() + " PTC]==> " + output.getReceiver().getDisplayName();
 
@@ -122,20 +125,21 @@ public class Visualizer extends Thread {
 
            for (Transaction transaction : block.getTransactions()) {
                for (Transaction.Output output : transaction.getOutputs()) {
-                   msg = fixedLengthString("", 12) + " ";
+                    msg = fixedLengthString("", 12) + " ";
 
-                   if (output.getSender() == null) {
-                       if (output.isReward()) {
+                    if (output.getSender() == null) {
+                        if (output.isReward()) {
                            msg += "[" + output.getTransactionHash() + "] REWARD ==[" + Blockchain.REWARD + " PTC]==> " + output.getReceiver().getDisplayName();
-                       } else {
+                        } else {
                            msg += "[" + output.getTransactionHash() + "] Genesis Transaction ==[" + Blockchain.REWARD + "PUTCoins]==> " + output.getReceiver().getDisplayName();
-                       }
-                   } else {
-                       msg += "[" + output.getTransactionHash() + "] " + output.getSender().getDisplayName() + " ==[" + output.getAmount() + " PTC]==> " + output.getReceiver().getDisplayName();
+                        }
+                    }  else if (output.isCommission()) {
+                        msg += "[" + output.getTransactionHash() + "][COMMISSION] " + output.getSender().getDisplayName() + " ==[" + output.getAmount() + " PTC]==> " + output.getReceiver().getDisplayName();
+                    } else {
+                        msg += "[" + output.getTransactionHash() + "] " + output.getSender().getDisplayName() + " ==[" + output.getAmount() + " PTC]==> " + output.getReceiver().getDisplayName();
+                    }
 
-                   }
-
-                   System.out.println(msg);
+                    System.out.println(msg);
                }
            }
            System.out.println();

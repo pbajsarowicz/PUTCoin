@@ -49,11 +49,11 @@ public class TransactionHandler implements Runnable {
     }
     
     /**
-     * Creates actual transaction objects add them to a block, confirms within 
+     * Creates actual transaction objects, adds them to a block, confirms within 
      * the block.
      * 
      * @param transactionInfoLists - list of transactionInfo objects (list of
-     * lists), where each object info about a single output.
+     * lists), where each object represents an info about a single output.
      * e.g.
      * list: [T1, T2]
      * T1: [TransInfo1, TransInfo2]                              (two outputs)
@@ -64,15 +64,20 @@ public class TransactionHandler implements Runnable {
         Block block = null;
         Wallet sender;
         Wallet confirmingWallet = getRandomWallet();
+        Boolean status = false;
         
         try {
             for (ArrayList<TransactionInfo> transactionInfo : transactionInfoLists) {
                 sender = transactionInfo.get(0).getSender();
                 block = transactionInfo.get(0).getTargetBlock();
-                Transaction newTransaction = sender.createTransaction(transactionInfo);
-                block.addTransaction(newTransaction);
+                Transaction newTransaction = sender.createTransaction(transactionInfo, confirmingWallet);
+                
+                status = block.addTransaction(newTransaction);
             }
-            confirmingWallet.confirmBlock(block);
+            
+            if (status) {
+                confirmingWallet.confirmBlock(block);
+            }
         } catch (CannotCreateTransactionException ex) {
             Logger.getLogger(TransactionGenerator.class.getName()).log(Level.SEVERE, null, ex);
         } catch (ConfirmBlockException ex) {
